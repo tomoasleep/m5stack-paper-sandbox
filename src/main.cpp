@@ -1,6 +1,6 @@
 #include <M5Unified.h>
 #include <qrcode.h>
-#include "qiita_icon_rgb565.h"
+#include "avatar_png.h"
 
 struct Link {
   const char* name;
@@ -32,7 +32,7 @@ static void drawQR(int x, int y, int scale, const char* url) {
 static void drawMain() {
   M5.Display.fillScreen(TFT_WHITE);
 
-  M5.Display.pushImage(20, 20, QIITA_ICON_W, QIITA_ICON_H, qiita_icon_rgb565);
+  M5.Display.drawPng(avatar_png, avatar_png_len, 20, 20);
 
   M5.Display.setTextColor(TFT_BLACK, TFT_WHITE);
   M5.Display.setTextSize(3);
