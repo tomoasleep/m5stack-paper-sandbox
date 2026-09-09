@@ -47,8 +47,8 @@ static void drawMain() {
   for (int i = 0; i < linkCount; i++) {
     M5.Display.setCursor(20, y);
     M5.Display.printf("%s", links[i].name);
-    M5.Display.setTextSize(1);
-    M5.Display.setCursor(120, y + 4);
+    M5.Display.setTextSize(1.5f);
+    M5.Display.setCursor(120, y + 2);
     M5.Display.printf("%s", links[i].url);
     M5.Display.setTextSize(2);
     y += 40;
