@@ -14,7 +14,6 @@ static const Link links[] = {
   {"Blog",   "https://www.nemunemu3.dev/"},
 };
 static constexpr int linkCount = sizeof(links) / sizeof(links[0]);
-
 static void drawQR(int x, int y, int scale, const char* url) {
   QRCode qrcode;
   uint8_t qrcodeData[qrcode_getBufferSize(4)];
@@ -29,7 +28,21 @@ static void drawQR(int x, int y, int scale, const char* url) {
   }
 }
 
-static void drawMain() {
+static int qrSizeFor(int scale, const char* url) {
+  QRCode qrcode;
+  uint8_t qrcodeData[qrcode_getBufferSize(4)];
+  qrcode_initText(&qrcode, qrcodeData, 4, ECC_LOW, url);
+  return qrcode.size * scale;
+}
+
+static void drawQRBlock(int x, int y, int scale, const char* url) {
+  drawQR(x, y, scale, url);
+  M5.Display.setTextSize(1);
+  M5.Display.setCursor(x, y + qrSizeFor(scale, url) + 8);
+  M5.Display.println("QR: Qiita");
+}
+
+static void drawPortrait() {
   M5.Display.fillScreen(TFT_WHITE);
 
   M5.Display.drawPng(avatar_png, avatar_png_len, 20, 20);
@@ -54,34 +67,71 @@ static void drawMain() {
     y += 40;
   }
 
-  int qrY = 320;
-  int qrScale = 3;
-  int qrSize = 0;
-  {
-    QRCode qrcode;
-    uint8_t qrcodeData[qrcode_getBufferSize(4)];
-    qrcode_initText(&qrcode, qrcodeData, 4, ECC_LOW, links[0].url);
-    qrSize = qrcode.size * qrScale;
-  }
-  int qrX = (M5.Display.width() - qrSize) / 2;
-  drawQR(qrX, qrY, qrScale, links[0].url);
+  drawQRBlock((M5.Display.width() - qrSizeFor(3, links[0].url)) / 2, 320, 3, links[0].url);
 
-  M5.Display.setTextSize(1);
-  M5.Display.setCursor(20, M5.Display.height() - 20);
-  M5.Display.println("QR: Qiita");
   M5.Display.display();
+}
+
+static void drawLandscape() {
+  M5.Display.fillScreen(TFT_WHITE);
+
+  M5.Display.drawPng(avatar_png, avatar_png_len, 20, 20);
+
+  M5.Display.setTextColor(TFT_BLACK, TFT_WHITE);
+  M5.Display.setTextSize(3);
+  M5.Display.setCursor(140, 30);
+  M5.Display.println("Tomoya Chiba");
+  M5.Display.setTextSize(2);
+  M5.Display.setCursor(140, 70);
+  M5.Display.println("@tomoasleep");
+
+  M5.Display.setTextSize(2);
+  int y = 160;
+  for (int i = 0; i < linkCount; i++) {
+    M5.Display.setCursor(20, y);
+    M5.Display.printf("%s", links[i].name);
+    M5.Display.setTextSize(1.5f);
+    M5.Display.setCursor(120, y + 2);
+    M5.Display.printf("%s", links[i].url);
+    M5.Display.setTextSize(2);
+    y += 60;
+  }
+
+  drawQRBlock(M5.Display.width() - qrSizeFor(3, links[0].url) - 30, 160, 3, links[0].url);
+
+  M5.Display.display();
+}
+
+enum class Orientation {
+  Portrait,
+  Landscape,
+};
+
+static Orientation orientation = Orientation::Portrait;
+
+static void draw() {
+  M5.Display.setRotation(orientation == Orientation::Portrait ? 0 : 1);
+  if (orientation == Orientation::Portrait) {
+    drawPortrait();
+  } else {
+    drawLandscape();
+  }
 }
 
 void setup() {
   auto cfg = M5.config();
   cfg.clear_display = false;
   M5.begin(cfg);
-  M5.Display.setRotation(0);
   M5.Display.setTextWrap(false);
   M5.Display.setAutoDisplay(false);
-  drawMain();
+  draw();
 }
 
 void loop() {
   M5.update();
+  if (M5.BtnA.wasPressed()) {
+    orientation = (orientation == Orientation::Portrait) ? Orientation::Landscape
+                                                         : Orientation::Portrait;
+    draw();
+  }
 }
