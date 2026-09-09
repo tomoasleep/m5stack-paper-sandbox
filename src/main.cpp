@@ -37,7 +37,7 @@ static int qrSizeFor(int scale, const char* url) {
 
 static void drawQRBlock(int x, int y, int scale, const char* url) {
   drawQR(x, y, scale, url);
-  M5.Display.setTextSize(1);
+  M5.Display.setFont(&fonts::FreeSans9pt7b);
   M5.Display.setCursor(x, y + qrSizeFor(scale, url) + 8);
   M5.Display.println("QR: Qiita");
 }
@@ -48,22 +48,23 @@ static void drawPortrait() {
   M5.Display.drawPng(avatar_png, avatar_png_len, 20, 20);
 
   M5.Display.setTextColor(TFT_BLACK, TFT_WHITE);
-  M5.Display.setTextSize(3);
+
+  M5.Display.setFont(&fonts::FreeSansBold18pt7b);
   M5.Display.setCursor(140, 30);
   M5.Display.println("Tomoya Chiba");
-  M5.Display.setTextSize(2);
+
+  M5.Display.setFont(&fonts::FreeSansBold12pt7b);
   M5.Display.setCursor(140, 70);
   M5.Display.println("@tomoasleep");
 
-  M5.Display.setTextSize(2);
-  int y = 160;
+  int y = 150;
   for (int i = 0; i < linkCount; i++) {
+    M5.Display.setFont(&fonts::FreeSansBold12pt7b);
     M5.Display.setCursor(20, y);
     M5.Display.printf("%s", links[i].name);
-    M5.Display.setTextSize(1.5f);
-    M5.Display.setCursor(120, y + 2);
+    M5.Display.setFont(&fonts::FreeSans9pt7b);
+    M5.Display.setCursor(120, y + 3);
     M5.Display.printf("%s", links[i].url);
-    M5.Display.setTextSize(2);
     y += 40;
   }
 
@@ -78,22 +79,24 @@ static void drawLandscape() {
   M5.Display.drawPng(avatar_png, avatar_png_len, 20, 20);
 
   M5.Display.setTextColor(TFT_BLACK, TFT_WHITE);
-  M5.Display.setTextSize(3);
+
+  M5.Display.setFont(&fonts::FreeSansBold24pt7b);
   M5.Display.setCursor(140, 30);
   M5.Display.println("Tomoya Chiba");
-  M5.Display.setTextSize(2);
-  M5.Display.setCursor(140, 70);
+
+  M5.Display.setFont(&fonts::FreeSansBold18pt7b);
+  M5.Display.setCursor(140, 80);
   M5.Display.println("@tomoasleep");
 
-  M5.Display.setTextSize(2);
+  M5.Display.setFont(&fonts::FreeSansBold12pt7b);
   int y = 160;
   for (int i = 0; i < linkCount; i++) {
     M5.Display.setCursor(20, y);
     M5.Display.printf("%s", links[i].name);
-    M5.Display.setTextSize(1.5f);
-    M5.Display.setCursor(120, y + 2);
+    M5.Display.setFont(&fonts::FreeSans12pt7b);
+    M5.Display.setCursor(120, y);
     M5.Display.printf("%s", links[i].url);
-    M5.Display.setTextSize(2);
+    M5.Display.setFont(&fonts::FreeSansBold12pt7b);
     y += 60;
   }
 
