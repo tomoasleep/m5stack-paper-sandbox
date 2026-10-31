@@ -44,11 +44,56 @@ ruby src/gen_bundle.rb           # バンドル生成
 `epd_emulator.js` が SPI/GPIO/I2C を横取りし、ED2208 のプロトコル
 (0x10 フレーム転送 → 0x12 リフレッシュ) をパースして Canvas に描画する。
 
-### 実機 (M5PaperColor) への書き込み
+### 実機 (M5PaperColor) へのビルド & フラッシュ
 
-TODO: R2P2-ESP32 に esp32s3 + 16MB flash + OPI PSRAM の sdkconfig を追加し、
-`storage/home/app.rb` として app.rb を焼く。ED2208 ドライバは gembox に
-`picoruby-ed2208` を追加してビルドする。
+**前提**
+
+- ESP-IDF **v5.5.4** (`~/.espressif/v5.5.4/esp-idf`) — v6.0.1 は picoruby 側が非対応 (mbedtls API 変更 / `soc/i2c_periph.h` 移動)
+- Ruby 3.4 (host mruby / mrbc ビルド用)。Ruby 4.0 は native gem のビルドに失敗する
+- 実機 (M5PaperColor) を USB 接続 (例: `/dev/cu.usbmodem101`)
+
+```sh
+# 0. アセット & バンドル生成
+#    - アバター/QR → 1bit ビットマップ
+#    - Terminus フォントデータ
+#    - storage/home/app.rb (名刺アプリのデバイスバンドル)
+ruby emulator/gen_assets.rb
+ruby emulator/gen_font.rb
+ruby emulator/src/gen_bundle.rb
+
+# 1. ESP-IDF 環境 (v5.5.4)
+cd picoruby/R2P2-ESP32
+source ~/.espressif/v5.5.4/esp-idf/export.sh
+
+# 2. 環境変数 (必須)
+#    SDKCONFIG_DEFAULTS : PaperColor 用ボード設定 (esp32s3 / 16MB flash / OPI PSRAM)
+#    CC                 : int32 mrbc をホストコンパイラでビルドするため
+#                         (未指定だと esp-clang が拾われ RISC-V ELF になる)
+#    PICORB_TASK_STACK_SIZE : app.rb のコンパイルで 8KB (デフォルト) では
+#                         スタック不足になるため 32KB に
+export SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfigs/m5stack_papercolor"
+export CC=/usr/bin/clang
+export PICORB_TASK_STACK_SIZE=32768
+
+# 3. 初回セットアップのみ (sdkconfig 生成 + host mruby ビルド)
+rake setup_papercolor
+
+# 4. ビルド & フラッシュ (app.rb は storage.bin に焼かれる)
+rake picoruby:build
+idf.py -p /dev/cu.usbmodem101 flash
+
+# 5. モニタ (終了は Ctrl-])
+idf.py -p /dev/cu.usbmodem101 monitor
+```
+
+**Tips**
+
+- **`.rb` を編集したのに反映されない**場合: gem mrblib の増分ビルドが効かないことがあるので
+  `rm -rf components/picoruby-esp32/picoruby/build/esp32-picoruby` してから再ビルド
+- アセット (画像/QR/フォント) を変えた場合のみ `emulator/gen_*.rb` と `emulator/src/gen_bundle.rb` を再実行
+- フラッシュ後のシリアルログで `Loading app.rb` の後エラーがなければ正常。
+  e-paper のリフレッシュには 15 秒前後かかる
+- BtnA (GPIO 10) で縦横切替。横表示はデバイスを横向きに持って読む向き
 
 ### ハードウェアメモ (M5PaperColor)
 
