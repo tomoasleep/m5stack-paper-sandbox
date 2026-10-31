@@ -1,0 +1,29 @@
+class ED2208
+  VERSION: String
+
+  BLACK: Integer
+  WHITE: Integer
+  YELLOW: Integer
+  RED: Integer
+  BLUE: Integer
+  GREEN: Integer
+
+  def self.convert_1bpp_to_4bpp: (String data, Integer width, ?Integer ink, ?Integer paper) -> String
+  def self.build_4bpp_table: (?Integer ink, ?Integer paper) -> Array[String]
+
+  def initialize: (
+    spi: SPI,
+    i2c: I2C,
+    cs_pin: Integer,
+    dc_pin: Integer,
+    rst_pin: Integer,
+    busy_pin: Integer,
+    ?w: Integer,
+    ?h: Integer
+  ) -> void
+
+  def update: () -> void
+  def fill: (?Integer color) -> void
+
+  include VRAM::Delegatable
+end

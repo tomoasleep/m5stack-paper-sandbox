@@ -1,0 +1,3 @@
+[submodule "picoruby/R2P2-ESP32"]
+	path = picoruby/R2P2-ESP32
+	url = https://github.com/picoruby/R2P2-ESP32.git

@@ -1,3 +1,5 @@
-.pio/
-.logs/
-.vibedump.jsonl
+.pio
+emulator/node_modules/
+emulator/tmp/
+emulator/www/picoruby_wasm/
+emulator/*.png
