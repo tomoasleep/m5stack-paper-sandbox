@@ -9,15 +9,32 @@ a pure-Ruby driver over `SPI` / `GPIO` / `I2C` / `VRAM` / `BDFFont`.
 
 ## Color convention
 
-The panel natively has 6 colors (4bpp), but this driver currently renders in
-**monochrome**. VRAM is 1-bit and follows the picoruby-uc8151 convention:
+The panel natively has **6 colors** (4bpp color-index frame; E Ink Spectra 6
+has no grayscale waveforms — shades are simulated with dithering, the same
+approach M5GFX takes). The driver keeps a 1-bit VRAM for text and shapes,
+following the picoruby-uc8151 convention:
 
 - `0` = paper (white)
 - `1` = ink (black)
 
 On `update`, the 1-bit VRAM page is expanded into the panel's 4bpp frame
-(`ink -> 0x0`, `paper -> 0x1`). Color indices (BLACK/WHITE/YELLOW/RED/BLUE/GREEN)
-are kept in the API for future color support.
+(`ink -> 0x0`, `paper -> 0x1`), then any color bitmaps queued via
+`draw_bitmap_4bpp` are overlaid.
+
+### Color bitmaps
+
+```ruby
+# data: 4bpp packed rows, 2px/byte, hi nibble = left pixel.
+# Nibbles are panel color indices: 0=black 1=white 2=yellow 3=red 5=blue 6=green
+# (0x4 and 0x7 are unused by the panel).
+display.draw_bitmap_4bpp(x: 20, y: 20, w: 100, h: 100, data: AVATAR_4BPP)
+display.update
+```
+
+The queue is consumed by `update` (logical coordinates are mapped through
+the current rotation), so re-queue bitmaps before every refresh, e.g. after
+`set_rotation`. Pre-dithered assets can be generated with
+`emulator/gen_assets.rb` (Floyd-Steinberg to the 6-color palette).
 
 ## Usage
 
@@ -55,13 +72,18 @@ GPIO0 is set output-push-pull-high, which powers the display (see
 ## API
 
 - `ED2208.new(spi:, i2c:, cs_pin:, dc_pin:, rst_pin:, busy_pin:, w: 400, h: 600)`
-- `update` — push VRAM to the panel and refresh (power cycle included)
+- `update` — push VRAM (+ queued color bitmaps) to the panel and refresh
+  (power cycle included)
 - `fill(color)` — fill VRAM (`0` = paper, `1` = ink)
+- `draw_bitmap_4bpp(x:, y:, w:, h:, data:)` — queue a 4bpp color-index
+  bitmap (2px/byte, hi nibble = left) overlaid at the next `update`
 - VRAM::Delegatable primitives: `set_pixel`, `draw_bitmap`, `draw_line`,
   `draw_rect`, `draw_circle`, plus `BDFFont` text rendering when the
   `picoruby-terminus` gem is present.
 - `ED2208.convert_1bpp_to_4bpp(data, width, ink, paper)` — pure function,
   unit-testable on a host interpreter (see `test/test_ed2208_logic.rb`).
+- `ED2208.blit_4bpp_to_frame(frame, data, x, y, w, h, disp_w, disp_h, rotation)`
+  — pure function overlaying a 4bpp bitmap onto a frame (rotation-aware).
 
 ## Status
 

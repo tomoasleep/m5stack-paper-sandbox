@@ -10,6 +10,17 @@ class ED2208
 
   def self.convert_1bpp_to_4bpp: (String data, Integer width, ?Integer ink, ?Integer paper) -> String
   def self.build_4bpp_table: (?Integer ink, ?Integer paper) -> Array[String]
+  def self.blit_4bpp_to_frame: (
+    String frame,
+    String data,
+    Integer x,
+    Integer y,
+    Integer bw,
+    Integer bh,
+    Integer disp_w,
+    Integer disp_h,
+    Integer rotation
+  ) -> String
 
   def initialize: (
     spi: SPI,
@@ -26,6 +37,7 @@ class ED2208
   def set_rotation: (Integer deg) -> void
   def update: () -> void
   def fill: (?Integer color) -> void
+  def draw_bitmap_4bpp: (x: Integer, y: Integer, w: Integer, h: Integer, data: String) -> void
 
   include VRAM::Delegatable
 end

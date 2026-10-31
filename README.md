@@ -19,7 +19,7 @@ picoruby/
     └── README.md
 picoruby/app.rb            # 名刺アプリ (実機・エミュレータ共通)
 emulator/                  # WASM エミュレーション環境
-├── gen_assets.rb          # アバター/QR → 1bit ビットマップ (base64)
+├── gen_assets.rb          # アバター → 4bpp 6色ディザ / QR → 1bit (base64)
 ├── gen_font.rb            # Terminus BDF → Ruby glyph データ
 ├── src/stubs.rb           # GPIO/SPI/I2C/VRAM/BDFFont の Ruby 実装
 ├── src/gen_bundle.rb      # www/app_bundle.rb 生成
@@ -33,7 +33,7 @@ test/
 ```sh
 cd emulator
 npm install                      # @picoruby/wasm-wasi
-ruby gen_assets.rb               # アバター/QR ビットマップ生成
+ruby gen_assets.rb               # アバター (4bpp 6色 FSディザ) / QR ビットマップ生成
 ruby gen_font.rb                 # Terminus フォントデータ生成
 ruby src/gen_bundle.rb           # バンドル生成
 (cd www && python3 -m http.server 8642)
@@ -54,7 +54,8 @@ ruby src/gen_bundle.rb           # バンドル生成
 
 ```sh
 # 0. アセット & バンドル生成
-#    - アバター/QR → 1bit ビットマップ
+#    - アバター → 4bpp カラーパレットビットマップ (6色, Floyd-Steinberg ディザ)
+#    - QR → 1bit ビットマップ
 #    - Terminus フォントデータ
 #    - storage/home/app.rb (名刺アプリのデバイスバンドル)
 ruby emulator/gen_assets.rb

@@ -137,15 +137,89 @@ class ED2208
     end
   end
 
+  # Overlay a 4bpp color-index bitmap onto a 4bpp frame, mapping logical
+  # display coords through the rotation into panel layout. Pure function so
+  # it can be unit-tested on a host interpreter. Only pixels covered by the
+  # bitmap are replaced; the rest of the frame keeps its color.
+  # Rotation convention matches picoruby-vram (rotate=90: panel (x,y) =
+  # (ly, disp_w-1-lx)); the frame is disp_h wide when rotated 90/270.
+  # @param frame [String] 4bpp frame, panel layout (frame_w/2 bytes per row)
+  # @param data [String] 4bpp bitmap rows, 2px/byte, hi nibble = left pixel
+  # @param x [Integer] logical x of the bitmap's left edge
+  # @param y [Integer] logical y of the bitmap's top edge
+  # @param bw [Integer] bitmap width in pixels
+  # @param bh [Integer] bitmap height in pixels
+  # @param disp_w [Integer] logical display width (after rotation)
+  # @param disp_h [Integer] logical display height (after rotation)
+  # @param rotation [Integer] 0, 90, 180 or 270
+  # @return [String] the same frame, mutated in place
+  def self.blit_4bpp_to_frame(frame, data, x, y, bw, bh, disp_w, disp_h, rotation)
+    frame_w = (rotation == 90 || rotation == 270) ? disp_h : disp_w
+    stride = frame_w / 2
+    bmp_row_bytes = (bw + 1) / 2
+    dy = 0
+    while dy < bh
+      ly = y + dy
+      if ly >= 0 && ly < disp_h
+        dx = 0
+        while dx < bw
+          lx = x + dx
+          if lx >= 0 && lx < disp_w
+            b = data.getbyte(dy * bmp_row_bytes + (dx >> 1))
+            c = (dx & 1) == 0 ? (b >> 4) : (b & 0x0F)
+            case rotation
+            when 90 then bx = ly;              by = disp_w - 1 - lx
+            when 180 then bx = disp_w - 1 - lx; by = disp_h - 1 - ly
+            when 270 then bx = disp_h - 1 - ly; by = lx
+            else bx = lx; by = ly
+            end
+            fi = by * stride + (bx >> 1)
+            old = frame.getbyte(fi)
+            if (bx & 1) == 0
+              frame.setbyte(fi, (old & 0x0F) | (c << 4))
+            else
+              frame.setbyte(fi, (old & 0xF0) | c)
+            end
+          end
+          dx += 1
+        end
+      end
+      dy += 1
+    end
+    frame
+  end
+
   # Send the VRAM contents to the panel and refresh it.
   # VRAM convention (same as picoruby-uc8151): bit 1 = ink (black),
   # bit 0 = paper (white). With rotation, the VRAM buffer is already
   # transposed into panel layout by picoruby-vram.
+  # Color bitmaps queued via draw_bitmap_4bpp are overlaid onto the
+  # expanded 4bpp frame before transfer, then the queue is cleared.
   def update
     data = @vram.pages[0][2]
     frame = ED2208.convert_1bpp_to_4bpp(data, @panel_w, BLACK)
+    if @pending_4bpp
+      i = 0
+      n = @pending_4bpp.size
+      while i < n
+        bm = @pending_4bpp[i]
+        ED2208.blit_4bpp_to_frame(frame, bm[:data], bm[:x], bm[:y],
+                                  bm[:w], bm[:h], @width, @height, @rotation)
+        i += 1
+      end
+      @pending_4bpp = nil
+    end
     _exec_transfer(frame)
     _turn_on_display
+  end
+
+  # Queue a 4bpp color-index bitmap (2px/byte, hi nibble = left pixel,
+  # nibbles are panel color indices) to be drawn at logical (x, y).
+  # Applied on top of the 1-bit VRAM at the next #update; the queue is
+  # consumed there, so re-queue after each refresh (e.g. on rotation).
+  def draw_bitmap_4bpp(x:, y:, w:, h:, data:)
+    (@pending_4bpp ||= []) << { x: x, y: y, w: w, h: h, data: data }
+    nil
   end
 
   def fill(color = WHITE)

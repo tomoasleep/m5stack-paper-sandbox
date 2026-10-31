@@ -71,8 +71,10 @@ def draw_card(display, portrait)
   width = display.instance_variable_get(:@width)
   display.fill(0)
 
-  # Avatar
-  draw_bitmap_data(display, 20, 20, AVATAR_W, AVATAR_H, AVATAR_1BPP)
+  # Avatar: 4bpp color-index bitmap (6-color palette, FS-dithered), drawn
+  # onto the 4bpp frame at update time. Must be re-queued after every
+  # update (the queue is consumed there).
+  display.draw_bitmap_4bpp(x: 20, y: 20, w: AVATAR_W, h: AVATAR_H, data: AVATAR_4BPP)
 
   # Name / handle
   display.draw_text("terminus_16x32", 140, 30, "Tomoya Chiba", 1)
