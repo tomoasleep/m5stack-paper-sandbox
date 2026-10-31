@@ -30,8 +30,10 @@ EPD = {
 }
 
 # Draw a 1-bit packed bitmap (row_bytes/row, MSB = leftmost pixel) via
-# VRAM#draw_bitmap, which takes rows as Integers limited to 32px chunks.
-def draw_bitmap_data(display, x, y, width, height, data, max_chunk = 32)
+# VRAM#draw_bitmap, which takes rows as Integers limited to chunks.
+# Chunk width must stay under 32: the device VM (MRB_INT32) cannot hold
+# a 32-bit row, so 24 keeps one bit headroom.
+def draw_bitmap_data(display, x, y, width, height, data, max_chunk = 24)
   row_bytes = (width + 7) / 8
   x0 = 0
   while x0 < width
