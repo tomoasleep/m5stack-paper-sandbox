@@ -124,32 +124,59 @@ class VRAM
     @h = h
     @invert = invert
     @rotate = rotate
-    @row_bytes = (w + 7) / 8
-    @buffer = "\x00".b * (@row_bytes * h)
+    # rotate=90/270: logical w/h are swapped in the buffer, keeping the
+    # buffer laid out like the physical panel (same as picoruby-vram).
+    if rotate == 90 || rotate == 270
+      @buf_w = h
+      @buf_h = w
+    else
+      @buf_w = w
+      @buf_h = h
+    end
+    @row_bytes = (@buf_w + 7) / 8
+    @buffer = "\x00".b * (@row_bytes * @buf_h)
+  end
+
+  # logical (x, y) -> buffer (bx, by)
+  def buf_coords(x, y)
+    case @rotate
+    when 90 then [y, @w - 1 - x]
+    when 180 then [@w - 1 - x, @h - 1 - y]
+    when 270 then [@h - 1 - y, x]
+    else [x, y]
+    end
   end
 
   def set_pixel(x, y, color = 1)
     return if x < 0 || x >= @w || y < 0 || y >= @h
-    idx = y * @row_bytes + (x / 8)
-    bit = 0x80 >> (x % 8)
-    cur = @buffer.getbyte(idx)
-    on = color != 0
-    on = !on if @invert
-    @buffer.setbyte(idx, on ? (cur | bit) : (cur & ~bit))
+    bx, by = buf_coords(x, y)
+    idx = by * @row_bytes + (bx / 8)
+    bit = 0x80 >> (bx % 8)
+    cur = @buffer.getbyte(idx) || 0
+    # normalize color to 0/1 (callers may pass booleans or other truthy values)
+    ink = color == 0 ? 0 : 1
+    ink = 1 - ink if @invert
+    if ink == 1
+      @buffer.setbyte(idx, cur | bit)
+    else
+      @buffer.setbyte(idx, cur & (~bit & 0xFF))
+    end
     nil
   end
 
   def get_pixel(x, y)
     return 0 if x < 0 || x >= @w || y < 0 || y >= @h
-    bit = 0x80 >> (x % 8)
-    px = (@buffer.getbyte(y * @row_bytes + (x / 8)) & bit) != 0 ? 1 : 0
+    bx, by = buf_coords(x, y)
+    bit = 0x80 >> (bx % 8)
+    px = (@buffer.getbyte(by * @row_bytes + (bx / 8)) & bit) != 0 ? 1 : 0
     @invert ? 1 - px : px
   end
 
   def fill(color = 1)
-    on = color != 0
-    on = !on if @invert
-    @buffer = (on ? "\xFF".b : "\x00".b) * (@row_bytes * @h)
+    ink = color == 0 ? 0 : 1
+    ink = 1 - ink if @invert
+    # buffer is @buf_w x @buf_h (transposed when rotated), NOT logical @h
+    @buffer = (ink == 1 ? "\xFF".b : "\x00".b) * (@row_bytes * @buf_h)
     nil
   end
 

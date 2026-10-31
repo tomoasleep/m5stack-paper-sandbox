@@ -19,9 +19,11 @@ class ED2208
     rst_pin: Integer,
     busy_pin: Integer,
     ?w: Integer,
-    ?h: Integer
+    ?h: Integer,
+    ?rotation: Integer
   ) -> void
 
+  def set_rotation: (Integer deg) -> void
   def update: () -> void
   def fill: (?Integer color) -> void
 

@@ -127,32 +127,59 @@ class VRAM
     @h = h
     @invert = invert
     @rotate = rotate
-    @row_bytes = (w + 7) / 8
-    @buffer = "\x00".b * (@row_bytes * h)
+    # rotate=90/270: logical w/h are swapped in the buffer, keeping the
+    # buffer laid out like the physical panel (same as picoruby-vram).
+    if rotate == 90 || rotate == 270
+      @buf_w = h
+      @buf_h = w
+    else
+      @buf_w = w
+      @buf_h = h
+    end
+    @row_bytes = (@buf_w + 7) / 8
+    @buffer = "\x00".b * (@row_bytes * @buf_h)
+  end
+
+  # logical (x, y) -> buffer (bx, by)
+  def buf_coords(x, y)
+    case @rotate
+    when 90 then [y, @w - 1 - x]
+    when 180 then [@w - 1 - x, @h - 1 - y]
+    when 270 then [@h - 1 - y, x]
+    else [x, y]
+    end
   end
 
   def set_pixel(x, y, color = 1)
     return if x < 0 || x >= @w || y < 0 || y >= @h
-    idx = y * @row_bytes + (x / 8)
-    bit = 0x80 >> (x % 8)
-    cur = @buffer.getbyte(idx)
-    on = color != 0
-    on = !on if @invert
-    @buffer.setbyte(idx, on ? (cur | bit) : (cur & ~bit))
+    bx, by = buf_coords(x, y)
+    idx = by * @row_bytes + (bx / 8)
+    bit = 0x80 >> (bx % 8)
+    cur = @buffer.getbyte(idx) || 0
+    # normalize color to 0/1 (callers may pass booleans or other truthy values)
+    ink = color == 0 ? 0 : 1
+    ink = 1 - ink if @invert
+    if ink == 1
+      @buffer.setbyte(idx, cur | bit)
+    else
+      @buffer.setbyte(idx, cur & (~bit & 0xFF))
+    end
     nil
   end
 
   def get_pixel(x, y)
     return 0 if x < 0 || x >= @w || y < 0 || y >= @h
-    bit = 0x80 >> (x % 8)
-    px = (@buffer.getbyte(y * @row_bytes + (x / 8)) & bit) != 0 ? 1 : 0
+    bx, by = buf_coords(x, y)
+    bit = 0x80 >> (bx % 8)
+    px = (@buffer.getbyte(by * @row_bytes + (bx / 8)) & bit) != 0 ? 1 : 0
     @invert ? 1 - px : px
   end
 
   def fill(color = 1)
-    on = color != 0
-    on = !on if @invert
-    @buffer = (on ? "\xFF".b : "\x00".b) * (@row_bytes * @h)
+    ink = color == 0 ? 0 : 1
+    ink = 1 - ink if @invert
+    # buffer is @buf_w x @buf_h (transposed when rotated), NOT logical @h
+    @buffer = (ink == 1 ? "\xFF".b : "\x00".b) * (@row_bytes * @buf_h)
     nil
   end
 
@@ -783,24 +810,45 @@ class ED2208
 
   # @param spi  [SPI] pre-initialized SPI (cs_pin: -1, hardware CS disabled)
   # @param i2c  [I2C] pre-initialized I2C used for the M5PM1 PMIC
-  def initialize(spi:, i2c:, cs_pin:, dc_pin:, rst_pin:, busy_pin:, w: 400, h: 600)
+  def initialize(spi:, i2c:, cs_pin:, dc_pin:, rst_pin:, busy_pin:, w: 400, h: 600, rotation: 0)
+    @panel_w = w
+    @panel_h = h
+    @rotation = rotation
     @spi  = spi
     @i2c  = i2c
     @cs   = GPIO.new(cs_pin,   GPIO::OUT)
     @dc   = GPIO.new(dc_pin,   GPIO::OUT)
     @rst  = GPIO.new(rst_pin,  GPIO::OUT)
     @busy = GPIO.new(busy_pin, GPIO::IN)
-    @width  = w
-    @height = h
-    @row_bytes_1bpp = (@width + 7) / 8
-    @frame_size_4bpp = @width * @height / 2
-    @vram = VRAM.new(w: @width, h: @height, cols: 1, rows: 1,
-                     layout: :horizontal, invert: false)
-    @vram.name = "ED2208"
     @bpp4_table = ED2208.build_4bpp_table
+    rebuild_vram
     power_on_epd
     reset
     init_display
+  end
+
+  # Logical width/height follow the rotation; the internal VRAM buffer
+  # is transposed by picoruby-vram (rotate=90/270) so its raw bytes stay
+  # in panel layout (panel_w x panel_h).
+  def set_rotation(deg)
+    @rotation = deg
+    rebuild_vram
+    nil
+  end
+
+  private def rebuild_vram
+    if @rotation == 90 || @rotation == 270
+      @width = @panel_h
+      @height = @panel_w
+    else
+      @width = @panel_w
+      @height = @panel_h
+    end
+    @row_bytes_1bpp = (@panel_w + 7) / 8
+    @frame_size_4bpp = @panel_w * @panel_h / 2
+    @vram = VRAM.new(w: @width, h: @height, cols: 1, rows: 1,
+                     layout: :horizontal, invert: false, rotate: @rotation)
+    @vram.name = "ED2208"
   end
 
   # Convert a 1-bit horizontal-packed bitmap into a 4bpp frame.
@@ -860,10 +908,11 @@ class ED2208
 
   # Send the VRAM contents to the panel and refresh it.
   # VRAM convention (same as picoruby-uc8151): bit 1 = ink (black),
-  # bit 0 = paper (white).
+  # bit 0 = paper (white). With rotation, the VRAM buffer is already
+  # transposed into panel layout by picoruby-vram.
   def update
     data = @vram.pages[0][2]
-    frame = ED2208.convert_1bpp_to_4bpp(data, @width, BLACK)
+    frame = ED2208.convert_1bpp_to_4bpp(data, @panel_w, BLACK)
     _exec_transfer(frame)
     _turn_on_display
   end
@@ -1123,32 +1172,31 @@ end
 
 def draw_card(display, portrait)
   # VRAM convention: 0 = paper (white), 1 = ink (black) — same as uc8151.
+  # set_rotation swaps the logical coordinate system (400x600 portrait,
+  # 600x400 landscape) and reallocates the VRAM transposed into panel layout.
+  display.set_rotation(portrait ? 0 : 90)
+  width = display.instance_variable_get(:@width)
   display.fill(0)
 
   # Avatar
   draw_bitmap_data(display, 20, 20, AVATAR_W, AVATAR_H, AVATAR_1BPP)
 
   # Name / handle
-  if portrait
-    display.draw_text("terminus_16x32", 140, 30, "Tomoya Chiba", 1)
-    display.draw_text("terminus_12x24", 140, 80, "@tomoasleep", 1)
-  else
-    display.draw_text("terminus_16x32", 140, 30, "Tomoya Chiba", 1)
-    display.draw_text("terminus_12x24", 140, 90, "@tomoasleep", 1)
-  end
+  display.draw_text("terminus_16x32", 140, 30, "Tomoya Chiba", 1)
+  display.draw_text("terminus_12x24", 140, portrait ? 80 : 90, "@tomoasleep", 1)
 
   # Links
   y = portrait ? 150 : 160
+  step = portrait ? 40 : 60
   LINKS.each do |name, url|
     display.draw_text("terminus_12x24", 20, y, name, 1)
     display.draw_text("terminus_8x16", 120, portrait ? y + 3 : y, url, 1)
-    y += portrait ? 40 : 60
+    y += step
   end
 
   # QR block centered (portrait) / right side (landscape)
   qr_w = QR_QIITA_W
-  x = portrait ? (display.instance_variable_get(:@width) - qr_w) / 2
-              : display.instance_variable_get(:@width) - qr_w - 30
+  x = portrait ? (width - qr_w) / 2 : width - qr_w - 30
   draw_qr(display, x, portrait ? 320 : 160)
 
   display.update

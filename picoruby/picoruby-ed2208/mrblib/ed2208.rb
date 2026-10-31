@@ -41,24 +41,45 @@ class ED2208
 
   # @param spi  [SPI] pre-initialized SPI (cs_pin: -1, hardware CS disabled)
   # @param i2c  [I2C] pre-initialized I2C used for the M5PM1 PMIC
-  def initialize(spi:, i2c:, cs_pin:, dc_pin:, rst_pin:, busy_pin:, w: 400, h: 600)
+  def initialize(spi:, i2c:, cs_pin:, dc_pin:, rst_pin:, busy_pin:, w: 400, h: 600, rotation: 0)
+    @panel_w = w
+    @panel_h = h
+    @rotation = rotation
     @spi  = spi
     @i2c  = i2c
     @cs   = GPIO.new(cs_pin,   GPIO::OUT)
     @dc   = GPIO.new(dc_pin,   GPIO::OUT)
     @rst  = GPIO.new(rst_pin,  GPIO::OUT)
     @busy = GPIO.new(busy_pin, GPIO::IN)
-    @width  = w
-    @height = h
-    @row_bytes_1bpp = (@width + 7) / 8
-    @frame_size_4bpp = @width * @height / 2
-    @vram = VRAM.new(w: @width, h: @height, cols: 1, rows: 1,
-                     layout: :horizontal, invert: false)
-    @vram.name = "ED2208"
     @bpp4_table = ED2208.build_4bpp_table
+    rebuild_vram
     power_on_epd
     reset
     init_display
+  end
+
+  # Logical width/height follow the rotation; the internal VRAM buffer
+  # is transposed by picoruby-vram (rotate=90/270) so its raw bytes stay
+  # in panel layout (panel_w x panel_h).
+  def set_rotation(deg)
+    @rotation = deg
+    rebuild_vram
+    nil
+  end
+
+  private def rebuild_vram
+    if @rotation == 90 || @rotation == 270
+      @width = @panel_h
+      @height = @panel_w
+    else
+      @width = @panel_w
+      @height = @panel_h
+    end
+    @row_bytes_1bpp = (@panel_w + 7) / 8
+    @frame_size_4bpp = @panel_w * @panel_h / 2
+    @vram = VRAM.new(w: @width, h: @height, cols: 1, rows: 1,
+                     layout: :horizontal, invert: false, rotate: @rotation)
+    @vram.name = "ED2208"
   end
 
   # Convert a 1-bit horizontal-packed bitmap into a 4bpp frame.
@@ -118,10 +139,11 @@ class ED2208
 
   # Send the VRAM contents to the panel and refresh it.
   # VRAM convention (same as picoruby-uc8151): bit 1 = ink (black),
-  # bit 0 = paper (white).
+  # bit 0 = paper (white). With rotation, the VRAM buffer is already
+  # transposed into panel layout by picoruby-vram.
   def update
     data = @vram.pages[0][2]
-    frame = ED2208.convert_1bpp_to_4bpp(data, @width, BLACK)
+    frame = ED2208.convert_1bpp_to_4bpp(data, @panel_w, BLACK)
     _exec_transfer(frame)
     _turn_on_display
   end

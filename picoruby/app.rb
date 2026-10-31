@@ -65,32 +65,31 @@ end
 
 def draw_card(display, portrait)
   # VRAM convention: 0 = paper (white), 1 = ink (black) — same as uc8151.
+  # set_rotation swaps the logical coordinate system (400x600 portrait,
+  # 600x400 landscape) and reallocates the VRAM transposed into panel layout.
+  display.set_rotation(portrait ? 0 : 90)
+  width = display.instance_variable_get(:@width)
   display.fill(0)
 
   # Avatar
   draw_bitmap_data(display, 20, 20, AVATAR_W, AVATAR_H, AVATAR_1BPP)
 
   # Name / handle
-  if portrait
-    display.draw_text("terminus_16x32", 140, 30, "Tomoya Chiba", 1)
-    display.draw_text("terminus_12x24", 140, 80, "@tomoasleep", 1)
-  else
-    display.draw_text("terminus_16x32", 140, 30, "Tomoya Chiba", 1)
-    display.draw_text("terminus_12x24", 140, 90, "@tomoasleep", 1)
-  end
+  display.draw_text("terminus_16x32", 140, 30, "Tomoya Chiba", 1)
+  display.draw_text("terminus_12x24", 140, portrait ? 80 : 90, "@tomoasleep", 1)
 
   # Links
   y = portrait ? 150 : 160
+  step = portrait ? 40 : 60
   LINKS.each do |name, url|
     display.draw_text("terminus_12x24", 20, y, name, 1)
     display.draw_text("terminus_8x16", 120, portrait ? y + 3 : y, url, 1)
-    y += portrait ? 40 : 60
+    y += step
   end
 
   # QR block centered (portrait) / right side (landscape)
   qr_w = QR_QIITA_W
-  x = portrait ? (display.instance_variable_get(:@width) - qr_w) / 2
-              : display.instance_variable_get(:@width) - qr_w - 30
+  x = portrait ? (width - qr_w) / 2 : width - qr_w - 30
   draw_qr(display, x, portrait ? 320 : 160)
 
   display.update
